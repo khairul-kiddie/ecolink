@@ -11,14 +11,16 @@ const schema = z.object({
   confirmPassword: z.string(),
 }).refine(d => d.newPassword === d.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] });
 
+type FormData = z.infer<typeof schema>;
+
 export default function ResetPasswordPage() {
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get('token') || '';
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const onSubmit = async (data: { newPassword: string }) => {
+  const onSubmit = async (data: FormData) => {
     try {
       await api.post('/auth/reset-password', { token, newPassword: data.newPassword });
       toast.success('Password reset successfully!');

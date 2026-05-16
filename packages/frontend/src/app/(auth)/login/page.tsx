@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth.store';
-import { env } from 'next/dist/server/config';
 
 const schema = z.object({
   email: z.string().email('Invalid email'),

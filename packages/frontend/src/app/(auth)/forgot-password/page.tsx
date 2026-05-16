@@ -8,12 +8,13 @@ import { toast } from 'sonner';
 import api from '@/lib/api';
 
 const schema = z.object({ email: z.string().email() });
+type FormData = z.infer<typeof schema>;
 
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ resolver: zodResolver(schema) });
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({ resolver: zodResolver(schema) });
 
-  const onSubmit = async (data: { email: string }) => {
+  const onSubmit = async (data: FormData) => {
     try {
       await api.post('/auth/forgot-password', data);
       setSent(true);
