@@ -2,7 +2,7 @@
 
 > Built for **MyHack 2026** · Problem Statement: *Automating Ecosystem Linkages Instead of Manual Coordination* by Cradle
 
-[![CI](https://github.com/your-org/ecolink/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/ecolink/actions)
+[![CI](https://github.com/khairul-kiddie/ecolink/actions/workflows/ci.yml/badge.svg)](https://github.com/khairul-kiddie/ecolink/actions)
 
 ---
 
@@ -50,7 +50,7 @@
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/your-org/ecolink.git && cd ecolink
+git clone https://github.com/khairul-kiddie/ecolink.git && cd ecolink
 
 # 2. Configure environment
 cp .env.example .env
@@ -59,20 +59,24 @@ cp .env.example .env
 #   JWT_ACCESS_SECRET=<64 random chars>
 #   JWT_REFRESH_SECRET=<64 different random chars>
 
-# 3. Start all services
-docker-compose up --build
+# 3. Build and start all services (detached)
+docker compose up --build -d
 
-# 4. Run database migrations (new terminal)
-docker exec ecolink_backend npx prisma migrate deploy
+# 4. Run database migrations (first-time setup)
+docker exec -it ecolink_backend npx prisma migrate dev --name init
+# Note: after the migrations folder is committed, teammates use:
+# docker exec ecolink_backend npx prisma migrate deploy
 
 # 5. Seed demo data
 docker exec ecolink_backend npx ts-node prisma/seed.ts
 
 # 6. Visit the app
-open http://localhost:3000       # Frontend
-open http://localhost:4000/api/docs  # Swagger UI
-open http://localhost:8025       # Mailhog (email preview)
+open http://localhost:3000            # Frontend
+open http://localhost:4000/api/docs   # Swagger UI
+open http://localhost:8025            # Mailhog (email preview)
 ```
+
+> **Apple Silicon (M1/M2/M3):** You may see a platform warning for the `mailhog` image (`linux/amd64` vs `linux/arm64/v8`). This is harmless — MailHog runs via Rosetta emulation and works correctly.
 
 ---
 
@@ -187,6 +191,37 @@ http://localhost:4000/api/docs
 JSON spec:
 ```
 http://localhost:4000/api/docs.json
+```
+
+---
+
+## Troubleshooting
+
+**`npm ci` fails during Docker build**
+The backend `package-lock.json` is required. If missing, generate it before building:
+```bash
+cd packages/backend && npm install && cd ../..
+docker compose build backend
+```
+
+**Frontend crash-loops with `next.config.ts is not supported`**
+This means Docker is using a stale cached image. Force a clean rebuild:
+```bash
+docker compose build --no-cache frontend
+docker compose up -d
+```
+
+**`prisma migrate dev` — non-interactive environment error**
+Add `-it` to allocate a terminal:
+```bash
+docker exec -it ecolink_backend npx prisma migrate dev --name init
+```
+
+**Verify all services are healthy**
+```bash
+docker compose ps
+docker compose logs backend --tail=20
+docker compose logs frontend --tail=20
 ```
 
 ---
