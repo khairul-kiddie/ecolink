@@ -1,6 +1,9 @@
 'use client';
+import axios from 'axios';
 import { create } from 'zustand';
 import api from '@/lib/api';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
 interface User {
   id: string;
@@ -55,13 +58,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     const token = sessionStorage.getItem('accessToken');
-    if (!token) {
+    const storedRefresh = localStorage.getItem('refreshToken');
+
+    if (!token && !storedRefresh) {
       set({ isLoading: false });
       return;
     }
+
     try {
+      // Access token gone (tab closed / browser restarted) but refresh token still valid.
+      // Exchange it silently before calling /auth/me so the user stays logged in.
+      if (!token && storedRefresh) {
+        const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: storedRefresh });
+        const { accessToken: newAccess, refreshToken: newRefresh } = data.data;
+        sessionStorage.setItem('accessToken', newAccess);
+        localStorage.setItem('refreshToken', newRefresh);
+      }
+
       const res = await api.get('/auth/me');
-      set({ user: res.data.data, accessToken: token, isAuthenticated: true, isLoading: false });
+      const currentToken = sessionStorage.getItem('accessToken')!;
+      set({ user: res.data.data, accessToken: currentToken, isAuthenticated: true, isLoading: false });
     } catch {
       sessionStorage.removeItem('accessToken');
       localStorage.removeItem('refreshToken');
