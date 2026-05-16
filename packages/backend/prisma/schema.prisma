@@ -1,0 +1,501 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector", schema: "public"), uuid_ossp(map: "uuid-ossp", schema: "public")]
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  PROGRAMME_OWNER
+  ECOSYSTEM_ADMIN
+  MENTOR
+  COMPANY_REP
+  PARTNER
+  SERVICE_PROVIDER
+}
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum RelationshipType {
+  MENTOR_COMPANY
+  COMPANY_PROGRAMME
+  PARTNER_INITIATIVE
+  SERVICE_PROVIDER_COMPANY
+  MENTOR_PROGRAMME
+  PARTNER_PROGRAMME
+}
+
+enum RelationshipStatus {
+  PROPOSED
+  PENDING_APPROVAL
+  ACTIVE
+  PAUSED
+  COMPLETED
+  TERMINATED
+}
+
+enum ProgrammeStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum MatchStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum NotificationType {
+  MATCH_PROPOSED
+  MATCH_ACCEPTED
+  MATCH_REJECTED
+  RELATIONSHIP_UPDATED
+  PROGRAMME_INVITATION
+  VERIFICATION_REQUEST
+  SYSTEM_ALERT
+}
+
+// ─── USER & AUTH ─────────────────────────────────────────────────────────────
+
+model User {
+  id                     String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  email                  String     @unique
+  passwordHash           String?
+  role                   UserRole
+  status                 UserStatus @default(PENDING_VERIFICATION)
+  firstName              String
+  lastName               String
+  avatarUrl              String?
+  phone                  String?
+  timezone               String     @default("Asia/Kuala_Lumpur")
+  isEmailVerified        Boolean    @default(false)
+  emailVerificationToken String?
+  emailVerificationExpiry DateTime?
+  lastLoginAt            DateTime?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  deletedAt              DateTime?
+
+  refreshTokens          RefreshToken[]
+  oauthAccounts          OAuthAccount[]
+  passwordResetTokens    PasswordResetToken[]
+  notifications          Notification[]
+  auditLogs              AuditLog[]
+  mentorProfile          MentorProfile?
+  companyProfile         CompanyProfile?
+  partnerProfile         PartnerProfile?
+  serviceProviderProfile ServiceProviderProfile?
+  programmeOwnership     Programme[]             @relation("ProgrammeOwner")
+  ecosystemAdminFor      EcosystemAdmin[]
+  initiatedRelationships Relationship[]          @relation("RelationshipInitiator")
+  approvedRelationships  Relationship[]          @relation("RelationshipApprover")
+  sentMessages           Message[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  token     String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  isRevoked Boolean  @default(false)
+  createdAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model OAuthAccount {
+  id             String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId         String    @db.Uuid
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       String
+  providerUserId String
+  accessToken    String?
+  refreshToken   String?
+  tokenExpiry    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  token     String    @unique
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@map("password_reset_tokens")
+}
+
+// ─── PROFILES ─────────────────────────────────────────────────────────────────
+
+model MentorProfile {
+  id                 String                      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId             String                      @unique @db.Uuid
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio                String?                     @db.Text
+  expertise          String[]
+  industries         String[]
+  linkedinUrl        String?
+  websiteUrl         String?
+  yearsExperience    Int?
+  maxMentees         Int                         @default(3)
+  availabilityHours  Int                         @default(4)
+  isVerified         Boolean                     @default(false)
+  verifiedAt         DateTime?
+  verifiedById       String?                     @db.Uuid
+  embedding          Unsupported("vector(768)")?
+  embeddingUpdatedAt DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  mentorRelationships Relationship[]   @relation("MentorRelationships")
+  matchProposals      MatchProposal[]  @relation("MentorMatches")
+
+  @@index([isVerified])
+  @@map("mentor_profiles")
+}
+
+model CompanyProfile {
+  id                 String                      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId             String                      @unique @db.Uuid
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName        String
+  registrationNo     String?
+  industry           String
+  stage              String
+  description        String?                     @db.Text
+  problem            String?                     @db.Text
+  website            String?
+  country            String                      @default("Malaysia")
+  city               String?
+  foundedYear        Int?
+  teamSize           Int?
+  needsTags          String[]
+  isVerified         Boolean                     @default(false)
+  verifiedAt         DateTime?
+  verifiedById       String?                     @db.Uuid
+  embedding          Unsupported("vector(768)")?
+  embeddingUpdatedAt DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  companyRelationships  Relationship[]          @relation("CompanyRelationships")
+  programmeApplications ProgrammeApplication[]
+  matchProposals        MatchProposal[]         @relation("CompanyMatches")
+
+  @@index([industry])
+  @@index([isVerified])
+  @@map("company_profiles")
+}
+
+model PartnerProfile {
+  id                 String                      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId             String                      @unique @db.Uuid
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgName            String
+  orgType            String
+  description        String?                     @db.Text
+  website            String?
+  country            String?
+  focusAreas         String[]
+  isVerified         Boolean                     @default(false)
+  embedding          Unsupported("vector(768)")?
+  embeddingUpdatedAt DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  partnerRelationships Relationship[] @relation("PartnerRelationships")
+
+  @@map("partner_profiles")
+}
+
+model ServiceProviderProfile {
+  id                 String                      @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId             String                      @unique @db.Uuid
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgName            String
+  serviceTypes       String[]
+  description        String?                     @db.Text
+  website            String?
+  country            String?
+  isVerified         Boolean                     @default(false)
+  embedding          Unsupported("vector(768)")?
+  embeddingUpdatedAt DateTime?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  serviceRelationships Relationship[] @relation("ServiceProviderRelationships")
+
+  @@map("service_provider_profiles")
+}
+
+model EcosystemAdmin {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id])
+  scope       String
+  permissions String[]
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, scope])
+  @@map("ecosystem_admins")
+}
+
+// ─── PROGRAMMES ───────────────────────────────────────────────────────────────
+
+model Programme {
+  id                  String          @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  name                String
+  description         String?         @db.Text
+  objectives          String[]
+  targetIndustries    String[]
+  targetStages        String[]
+  country             String
+  city                String?
+  status              ProgrammeStatus @default(DRAFT)
+  startDate           DateTime?
+  endDate             DateTime?
+  maxCompanies        Int?
+  ownerId             String          @db.Uuid
+  owner               User            @relation("ProgrammeOwner", fields: [ownerId], references: [id])
+  applicationDeadline DateTime?
+  benefits            String[]
+  requirements        String[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  deletedAt           DateTime?
+
+  applications ProgrammeApplication[]
+  relationships Relationship[]
+  matchRules   MatchRule[]
+
+  @@index([status])
+  @@index([country])
+  @@map("programmes")
+}
+
+model ProgrammeApplication {
+  id              String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programmeId     String         @db.Uuid
+  programme       Programme      @relation(fields: [programmeId], references: [id])
+  companyId       String         @db.Uuid
+  company         CompanyProfile @relation(fields: [companyId], references: [id])
+  status          String         @default("PENDING")
+  applicationData Json?
+  reviewNote      String?
+  reviewedAt      DateTime?
+  reviewedById    String?        @db.Uuid
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([programmeId, companyId])
+  @@map("programme_applications")
+}
+
+// ─── RELATIONSHIPS (First-Class Entities) ─────────────────────────────────────
+
+model Relationship {
+  id                String             @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  type              RelationshipType
+  status            RelationshipStatus @default(PROPOSED)
+
+  mentorId          String?            @db.Uuid
+  mentor            MentorProfile?     @relation("MentorRelationships", fields: [mentorId], references: [id])
+  companyId         String?            @db.Uuid
+  company           CompanyProfile?    @relation("CompanyRelationships", fields: [companyId], references: [id])
+  partnerId         String?            @db.Uuid
+  partner           PartnerProfile?    @relation("PartnerRelationships", fields: [partnerId], references: [id])
+  serviceProviderId String?            @db.Uuid
+  serviceProvider   ServiceProviderProfile? @relation("ServiceProviderRelationships", fields: [serviceProviderId], references: [id])
+  programmeId       String?            @db.Uuid
+  programme         Programme?         @relation(fields: [programmeId], references: [id])
+
+  initiatedById     String             @db.Uuid
+  initiatedBy       User               @relation("RelationshipInitiator", fields: [initiatedById], references: [id])
+  approvedById      String?            @db.Uuid
+  approvedBy        User?              @relation("RelationshipApprover", fields: [approvedById], references: [id])
+
+  aiMatchScore      Float?
+  aiRationale       String?            @db.Text
+  isAiGenerated     Boolean            @default(false)
+
+  startedAt         DateTime?
+  endedAt           DateTime?
+  pausedAt          DateTime?
+  nextCheckIn       DateTime?
+
+  tags              String[]
+  notes             String?            @db.Text
+  outcomes          Json?
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+
+  engagementLogs    EngagementLog[]
+  messages          Message[]
+
+  @@index([type])
+  @@index([status])
+  @@index([mentorId])
+  @@index([companyId])
+  @@index([programmeId])
+  @@map("relationships")
+}
+
+model EngagementLog {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  relationshipId String       @db.Uuid
+  relationship   Relationship @relation(fields: [relationshipId], references: [id])
+  logType        String
+  title          String
+  content        String?      @db.Text
+  rating         Int?
+  durationMins   Int?
+  loggedById     String       @db.Uuid
+  occurredAt     DateTime
+  createdAt      DateTime     @default(now())
+
+  @@index([relationshipId])
+  @@map("engagement_logs")
+}
+
+// ─── AI MATCHING ──────────────────────────────────────────────────────────────
+
+model MatchProposal {
+  id              String         @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  mentorId        String?        @db.Uuid
+  mentor          MentorProfile? @relation("MentorMatches", fields: [mentorId], references: [id])
+  companyId       String?        @db.Uuid
+  company         CompanyProfile? @relation("CompanyMatches", fields: [companyId], references: [id])
+  status          MatchStatus    @default(PENDING)
+  score           Float
+  rationale       String         @db.Text
+  scoreBreakdown  Json
+  expiresAt       DateTime
+  acceptedAt      DateTime?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([mentorId])
+  @@index([companyId])
+  @@index([status])
+  @@map("match_proposals")
+}
+
+model MatchRule {
+  id          String     @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  programmeId String?    @db.Uuid
+  programme   Programme? @relation(fields: [programmeId], references: [id])
+  name        String
+  description String?
+  ruleType    String
+  config      Json
+  weight      Float      @default(1.0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("match_rules")
+}
+
+// ─── COMMUNICATIONS ───────────────────────────────────────────────────────────
+
+model Message {
+  id             String       @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  relationshipId String       @db.Uuid
+  relationship   Relationship @relation(fields: [relationshipId], references: [id])
+  senderId       String       @db.Uuid
+  sender         User         @relation(fields: [senderId], references: [id])
+  content        String       @db.Text
+  isAiGenerated  Boolean      @default(false)
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([relationshipId])
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId    String           @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ─── AUDIT & GOVERNANCE ───────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  userId     String?  @db.Uuid
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model SystemConfig {
+  id          String   @id @default(dbgenerated("uuid_generate_v4()")) @db.Uuid
+  key         String   @unique
+  value       Json
+  description String?
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@map("system_configs")
+}

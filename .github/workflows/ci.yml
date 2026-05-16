@@ -1,0 +1,66 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: ecolink_test
+          POSTGRES_USER: ecolink
+          POSTGRES_PASSWORD: test_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        options: --health-cmd "redis-cli ping"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Install backend deps
+        run: cd packages/backend && npm ci
+
+      - name: Type check backend
+        run: cd packages/backend && npx tsc --noEmit
+
+      - name: Run Prisma migrate
+        env:
+          DATABASE_URL: postgresql://ecolink:test_pass@localhost:5432/ecolink_test
+        run: cd packages/backend && npx prisma migrate deploy
+
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql://ecolink:test_pass@localhost:5432/ecolink_test
+          REDIS_URL: redis://localhost:6379
+          JWT_ACCESS_SECRET: test_secret_that_is_long_enough_to_be_valid_32chars
+          JWT_REFRESH_SECRET: test_refresh_secret_long_enough_to_pass_validation
+          GEMINI_API_KEY: dummy_for_tests
+          GOOGLE_CLIENT_ID: dummy
+          GOOGLE_CLIENT_SECRET: dummy
+          MINIO_ENDPOINT: localhost
+          MINIO_PORT: 9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin123
+          SMTP_HOST: localhost
+          SMTP_PORT: 1025
+          FRONTEND_URL: http://localhost:3000
+        run: cd packages/backend && npm test
+
+      - name: Install frontend deps
+        run: cd packages/frontend && npm ci
+
+      - name: Type check frontend
+        run: cd packages/frontend && npx tsc --noEmit
+
+      - name: Build frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+        run: cd packages/frontend && npm run build
