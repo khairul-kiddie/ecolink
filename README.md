@@ -78,6 +78,12 @@ open http://localhost:8025            # Mailhog (email preview)
 
 > **Apple Silicon (M1/M2/M3):** You may see a platform warning for the `mailhog` image (`linux/amd64` vs `linux/arm64/v8`). This is harmless — MailHog runs via Rosetta emulation and works correctly.
 
+> **IDE type resolution:** The project runs entirely in Docker, so `node_modules` are not installed on your host by default. This causes editors to show "Cannot find module" errors. To fix, run once locally:
+> ```bash
+> cd packages/backend && npm install && cd ../frontend && npm install && cd ../..
+> ```
+> This does not affect Docker or CI — it only enables IDE IntelliSense and type checking in your editor.
+
 ---
 
 ## Seed Credentials
