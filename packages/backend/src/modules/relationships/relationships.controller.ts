@@ -36,6 +36,21 @@ export async function listRelationships(req: Request, res: Response, next: NextF
     } else if (user.role === 'COMPANY_REP') {
       const company = await prisma.companyProfile.findUnique({ where: { userId: user.id } });
       if (company) where.companyId = company.id;
+    } else if (user.role === 'PROGRAMME_OWNER') {
+      // Show relationships explicitly linked to owned programmes, plus relationships
+      // for companies that applied to owned programmes (AI matches carry no programmeId).
+      const ownedProgrammes = await prisma.programme.findMany({
+        where: { ownerId: user.id, deletedAt: null },
+        select: { id: true, applications: { select: { companyId: true } } },
+      });
+      const ownedProgrammeIds = ownedProgrammes.map((p) => p.id);
+      const companyIdsInProgrammes = [
+        ...new Set(ownedProgrammes.flatMap((p) => p.applications.map((a) => a.companyId))),
+      ];
+      where.OR = [
+        { programmeId: { in: ownedProgrammeIds } },
+        { companyId: { in: companyIdsInProgrammes } },
+      ];
     }
 
     const [data, total] = await Promise.all([
