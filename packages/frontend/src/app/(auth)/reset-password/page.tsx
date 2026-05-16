@@ -1,4 +1,5 @@
 'use client';
+import { Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,7 +14,7 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const params = useSearchParams();
   const router = useRouter();
   const token = params.get('token') || '';
@@ -31,28 +32,36 @@ export default function ResetPasswordPage() {
   };
 
   return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-6">Set new password</h1>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New password</label>
+          <input {...register('newPassword')} type="password" placeholder="••••••••"
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          {errors.newPassword && <p className="text-red-500 text-sm mt-1">Password must be 8+ chars with uppercase, number, and special character</p>}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm password</label>
+          <input {...register('confirmPassword')} type="password" placeholder="••••••••"
+            className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword.message}</p>}
+        </div>
+        <button type="submit" disabled={isSubmitting || !token}
+          className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
+          {isSubmitting ? 'Resetting...' : 'Reset password'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white text-center mb-6">Set new password</h1>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New password</label>
-            <input {...register('newPassword')} type="password" placeholder="••••••••"
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.newPassword && <p className="text-red-500 text-sm mt-1">Password must be 8+ chars with uppercase, number, and special character</p>}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Confirm password</label>
-            <input {...register('confirmPassword')} type="password" placeholder="••••••••"
-              className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-4 py-3 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword.message}</p>}
-          </div>
-          <button type="submit" disabled={isSubmitting || !token}
-            className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50">
-            {isSubmitting ? 'Resetting...' : 'Reset password'}
-          </button>
-        </form>
-      </div>
+      <Suspense fallback={<div className="text-gray-500">Loading...</div>}>
+        <ResetPasswordForm />
+      </Suspense>
     </div>
   );
 }
