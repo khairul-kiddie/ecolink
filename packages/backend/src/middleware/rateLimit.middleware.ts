@@ -10,7 +10,8 @@ function createLimiter(windowMs: number, max: number, message: string) {
     standardHeaders: true,
     legacyHeaders: false,
     store: new RedisStore({
-      sendCommand: (...args: string[]) => redis.call(...(args as [string, ...string[]])),
+      // ioredis returns Promise<unknown>; cast satisfies rate-limit-redis's SendCommandFn
+      sendCommand: (...args: string[]) => redis.call(...(args as [string, ...string[]])) as Promise<any>,
     }),
   });
 }

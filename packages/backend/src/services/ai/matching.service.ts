@@ -97,7 +97,7 @@ async function reRankWithGemini(
 export async function findMentorsForCompany(
   companyId: string,
   limit = 5,
-  programmeId?: string
+  _programmeId?: string
 ): Promise<MatchResult[]> {
   const company = await prisma.companyProfile.findUnique({
     where: { id: companyId },
@@ -106,19 +106,21 @@ export async function findMentorsForCompany(
   if (!company) return [];
 
   // Step 1: Vector search for top-K candidates
+  // Prisma excludes Unsupported("vector") fields from generated types — cast to access at runtime
+  const companyEmbedding = (company as any).embedding as string | null | undefined;
   let mentorIds: string[] = [];
-  if (company.embedding) {
+  if (companyEmbedding) {
     const results = await prisma.$queryRaw<{ id: string; similarity: number }[]>`
-      SELECT id, 1 - (embedding <=> ${company.embedding}::vector) as similarity
+      SELECT id, 1 - (embedding <=> ${companyEmbedding}::vector) as similarity
       FROM mentor_profiles
       WHERE embedding IS NOT NULL
-      ORDER BY embedding <=> ${company.embedding}::vector
+      ORDER BY embedding <=> ${companyEmbedding}::vector
       LIMIT ${limit * 3}
     `;
-    mentorIds = results.map(r => r.id);
+    mentorIds = results.map((r: { id: string; similarity: number }) => r.id);
   } else {
     const mentors = await prisma.mentorProfile.findMany({ take: limit * 3, select: { id: true } });
-    mentorIds = mentors.map(m => m.id);
+    mentorIds = mentors.map((m: { id: string }) => m.id);
   }
 
   // Step 2: Gemini re-ranking
@@ -156,19 +158,21 @@ export async function findCompaniesForMentor(mentorId: string, limit = 5): Promi
   });
   if (!mentor) return [];
 
+  // Prisma excludes Unsupported("vector") fields from generated types — cast to access at runtime
+  const mentorEmbedding = (mentor as any).embedding as string | null | undefined;
   let companyIds: string[] = [];
-  if (mentor.embedding) {
+  if (mentorEmbedding) {
     const results = await prisma.$queryRaw<{ id: string }[]>`
       SELECT id
       FROM company_profiles
       WHERE embedding IS NOT NULL
-      ORDER BY embedding <=> ${mentor.embedding}::vector
+      ORDER BY embedding <=> ${mentorEmbedding}::vector
       LIMIT ${limit * 3}
     `;
-    companyIds = results.map(r => r.id);
+    companyIds = results.map((r: { id: string }) => r.id);
   } else {
     const companies = await prisma.companyProfile.findMany({ take: limit * 3, select: { id: true } });
-    companyIds = companies.map(c => c.id);
+    companyIds = companies.map((c: { id: string }) => c.id);
   }
 
   const companies = await prisma.companyProfile.findMany({
